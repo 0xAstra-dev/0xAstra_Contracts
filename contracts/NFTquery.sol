@@ -1,27 +1,34 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+interface IERC721 {
+    function ownerOf(uint256 tokenId) external view returns (address);
+}
+
 contract TokenQuery {
     function getTokenIds(address nftCollection, address owner) external view returns (uint256[] memory) {
-        assembly {
-            mstore(0x80, shl(224, 0x70a08231)) 
-            mstore(0x84, owner)
-            let success := staticcall(gas(), nftCollection, 0x80, 0x24, 0x00, 0x20)
-            let tokenBalance := mload(0x00)
-            let tokenIds := mload(0x40)
-            mstore(tokenIds, tokenBalance)
-            let size := mul(tokenBalance, 0x20)
-            mstore(0x40, add(tokenIds, add(0x20, size))) 
-            mstore(0x80, shl(224, 0x2f745c59)) 
-            mstore(0x84, owner)
+        IERC721 nft = IERC721(nftCollection);
 
-            for { let i := 0 } lt(i, tokenBalance) { i := add(i, 1) } {
-                mstore(0xa4, i)
-                success := staticcall(gas(), nftCollection, 0x80, 0x64, 0x00, 0x20)
-                mstore(add(add(tokenIds, 0x20), mul(i, 0x20)), mload(0x00))
+        uint256 maxSupply = 800;
+        uint256[] memory ownedTokenIds = new uint256[](maxSupply);
+        uint256 ownedTokenCount = 0;
+
+        for (uint256 tokenId = 0; tokenId < maxSupply; tokenId++) {
+            try nft.ownerOf(tokenId) returns (address tokenOwner) {
+                if (tokenOwner == owner) {
+                    ownedTokenIds[ownedTokenCount] = tokenId;
+                    ownedTokenCount++;
+                }
+            } catch {
+                continue;
             }
-
-            return(tokenIds, add(0x20, size))
         }
+
+        uint256[] memory result = new uint256[](ownedTokenCount);
+        for (uint256 i = 0; i < ownedTokenCount; i++) {
+            result[i] = ownedTokenIds[i];
+        }
+
+        return result;
     }
 }
