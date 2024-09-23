@@ -38,11 +38,10 @@ contract AstraIntelCollect is Ownable,VizingOmni {
     ) internal virtual override {
       require(srcChainId == WHITE_LIST_CHAIN_ID, 'Astra: vizing chainId mismatch');
       require(srcContract == WHITE_LIST_ADDRESS, 'Astra: whitelist contract mismatch');
-      address addr;
-      bytes memory x = message;
-      assembly {
-        addr := mload(add(x,20))
-      }
+      
+      (bytes memory encodedAddress) = abi.decode(message, (bytes));
+      address addr = address(bytes20(encodedAddress));
+      
       _collect(addr);
     }
 
