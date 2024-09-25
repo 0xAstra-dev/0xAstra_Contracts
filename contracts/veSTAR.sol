@@ -11,10 +11,10 @@ contract veSTAR {
 
     struct LockInfo {
         uint256 amount;
-        uint256 unlockTime; 
+        uint256 unlockTime;
     }
 
-    mapping(address => LockInfo) public locked; 
+    mapping(address => LockInfo[]) public locked;
 
     event Locked(address indexed user, uint256 amount, uint256 unlockTime);
     event Withdrawn(address indexed user, uint256 amount);
@@ -31,31 +31,48 @@ contract veSTAR {
 
         uint256 unlockTime = block.timestamp + time;
 
-        locked[msg.sender].amount += amount;
-        locked[msg.sender].unlockTime = unlockTime;
+        // Create a new lock entry
+        LockInfo memory newLock = LockInfo({
+            amount: amount,
+            unlockTime: unlockTime
+        });
+
+        // Add the new lock to the user's locks array
+        locked[msg.sender].push(newLock);
 
         emit Locked(msg.sender, amount, unlockTime);
     }
 
     function calculateveSTAR(address user) public view returns (uint256) {
-        LockInfo memory lockData = locked[user];
-        if (block.timestamp >= lockData.unlockTime) {
+        LockInfo[] memory lockData = locked[user];
+        if (block.timestamp >= lockData[lockData.length - 1].unlockTime) {
             return 0; 
         }
-        uint256 lockDuration = lockData.unlockTime - block.timestamp;
-        return (lockData.amount * lockDuration) / MAX_LOCK_TIME;
+        uint256 lockDuration = lockData[lockData.length - 1].unlockTime - block.timestamp;
+        return (lockData[lockData.length - 1].amount * lockDuration) / MAX_LOCK_TIME;
     }
 
     function withdraw() external {
-        LockInfo memory lockData = locked[msg.sender];
-        require(block.timestamp >= lockData.unlockTime, "Lock period has not expired");
-        require(lockData.amount > 0, "No tokens to withdraw");
+        LockInfo[] storage userLocks = locked[msg.sender];
+        require(userLocks.length > 0, "No locked tokens");
 
-        uint256 amount = lockData.amount;
-        locked[msg.sender].amount = 0;  
+        uint256 totalAmount = 0;
+        uint256 currentTime = block.timestamp;
 
-        starToken.transfer(msg.sender, amount); // Cast to address
-        emit Withdrawn(msg.sender, amount);
+        for (uint256 i = 0; i < userLocks.length; i++) {
+            if (currentTime >= userLocks[i].unlockTime) {
+                totalAmount += userLocks[i].amount;
+                userLocks[i] = userLocks[userLocks.length - 1];
+                userLocks.pop();
+                i--;
+            }
+        }
+
+        require(totalAmount > 0, "No tokens available for withdrawal");
+
+        starToken.transfer(msg.sender, totalAmount);
+
+        emit Withdrawn(msg.sender, totalAmount);
     }
 
     function getVotingPower(address user) external view returns (uint256) {
